@@ -1,28 +1,30 @@
-name: CI - Docker Web
+name: CI - Docker Web-ejemplo
 
 on:
-    pull_request:
-        branches:
-        - main
-    push:
-        branches:
-        - main
-    workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
 
 permissions:
-    contents: read
+  contents: read
 
 jobs:
 
-    # --------------------------------------------------
-    # JOB 1: CONSTRUIR Y PROBAR LA APLICACIÓN
-    # --------------------------------------------------
+  # --------------------------------------------------
+  # JOB 1: CONSTRUIR Y PROBAR LA APLICACIÓN
+  # --------------------------------------------------
 
-    verify:
+  verify:
 
-        name: Construir y verificar Docker
+    name: Construir y verificar Docker
 
-        runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
 
     steps:
 
