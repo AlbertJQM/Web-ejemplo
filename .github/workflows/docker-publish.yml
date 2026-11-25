@@ -1,0 +1,120 @@
+name: CI - Docker Web
+
+on:
+    pull_request:
+        branches:
+        - main
+    push:
+        branches:
+        - main
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+
+    # --------------------------------------------------
+    # JOB 1: CONSTRUIR Y PROBAR LA APLICACIÓN
+    # --------------------------------------------------
+
+    verify:
+
+        name: Construir y verificar Docker
+
+        runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Descargar repositorio
+        uses: actions/checkout@v7
+
+      - name: Construir imagen Docker
+        run: |
+          docker build -t web-ejemplo:ci .
+
+      - name: Ejecutar prueba de funcionamiento
+        run: |
+          set -eu
+
+          docker run -d \
+            --name web-ejemplo-test \
+            -p 127.0.0.1:8000:8000 \
+            -e SECRET_KEY="clave-temporal-ci" \
+            -e DATABASE_PATH="/tmp/app.db" \
+            web-ejemplo:ci
+
+          trap 'docker rm -f web-ejemplo-test >/dev/null 2>&1 || true' EXIT
+
+          echo "Esperando a que Flask esté disponible..."
+
+          for intento in $(seq 1 20); do
+
+            if curl --fail --silent \
+              http://127.0.0.1:8000/status; then
+
+              echo ""
+              echo "La aplicación responde correctamente."
+              exit 0
+
+            fi
+
+            sleep 2
+
+          done
+
+          echo "La aplicación no respondió."
+
+          docker logs web-ejemplo-test
+
+          exit 1
+
+  # --------------------------------------------------
+  # JOB 2: PUBLICAR LA IMAGEN EN GHCR
+  # --------------------------------------------------
+
+  publish:
+
+    name: Publicar imagen en GHCR
+
+    needs: verify
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+
+      - name: Descargar repositorio
+        uses: actions/checkout@v7
+
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Iniciar sesión en GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generar etiquetas de imagen
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/albertjqm/web-ejemplo
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=long,prefix=sha-
+
+      - name: Construir y publicar imagen
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
