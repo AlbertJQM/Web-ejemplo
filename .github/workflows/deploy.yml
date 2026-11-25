@@ -1,0 +1,63 @@
+
+name: Deploy to Ubuntu Server
+
+on:
+  workflow_run:
+    workflows: ["CI - Docker Web-ejemplo"]
+    types:
+      - completed
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy application
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    runs-on: [self-hosted, linux, x64]
+
+    steps:
+      - name: Deploy application
+        run: |
+          cd /home/albert/Web
+
+          echo "Validating Docker Compose..."
+          docker compose config -q
+
+          echo "Downloading the latest image..."
+          docker compose pull
+
+          echo "Updating application..."
+          docker compose up -d --remove-orphans
+
+          echo "Checking containers..."
+          docker compose ps
+
+      - name: Verify application health
+        run: |
+          for i in {1..12}; do
+            if curl -fsS http://127.0.0.1:8000/status; then
+              echo "Application is healthy"
+              exit 0
+            fi
+
+            echo "Waiting for application..."
+            sleep 5
+          done
+
+          echo "Health check failed"
+          cd /home/albert/Web
+          docker compose logs --tail=100
+          exit 1
